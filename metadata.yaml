@@ -1,0 +1,13 @@
+name: astrbot_plugin_dafeiyu_rules
+display_name: 小鲸鱼的规矩
+desc: 按场合注入的临时规矩：每条可单独开关，可只对群聊或只对私聊生效，改动立刻生效。
+version: 0.1.0
+author: zexuan604
+help: 在 WebUI 的插件配置里写「范围 | 规矩」一行一条，范围填 all / group / private；聊天里发 /规矩 可以看当前场合生效的哪几条。
+tags:
+  - 规则
+  - 提示词
+  - 场合
+support_platforms:
+  - aiocqhttp
+  - weixin_oc

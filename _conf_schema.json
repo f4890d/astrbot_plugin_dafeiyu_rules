@@ -1,0 +1,26 @@
+{
+  "enabled": {
+    "type": "bool",
+    "description": "总开关",
+    "default": true,
+    "hint": "关掉之后一条规矩都不注入，插件本身还留着"
+  },
+  "rules": {
+    "type": "text",
+    "description": "规矩列表",
+    "default": "",
+    "hint": "一行一条，格式：范围 | 规矩正文。范围填 all（都生效）/ group（只在群里）/ private（只在私聊）。# 开头的行当注释跳过"
+  },
+  "header": {
+    "type": "string",
+    "description": "注入时的标题",
+    "default": "【此刻的规矩】",
+    "hint": "追加到系统提示末尾的那一段的第一行"
+  },
+  "max_chars": {
+    "type": "int",
+    "description": "注入上限（字符）",
+    "default": 600,
+    "hint": "所有规矩加起来超过这个数就截断，避免把上下文撑爆"
+  }
+}
