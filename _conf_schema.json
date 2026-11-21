@@ -22,5 +22,11 @@
     "description": "注入上限（字符）",
     "default": 600,
     "hint": "所有规矩加起来超过这个数就截断，避免把上下文撑爆"
+  },
+  "inject_channel": {
+    "type": "bool",
+    "description": "告诉她现在是从哪个渠道说话",
+    "default": true,
+    "hint": "每轮往系统提示末尾加一行「你现在在哪」：QQ / 微信 / 桌面桌宠 / 网页。这样她不会把渠道说错，也不用靠猜"
   }
 }

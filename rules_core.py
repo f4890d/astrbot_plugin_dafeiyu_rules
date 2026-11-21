@@ -61,6 +61,54 @@ def select(rules: list[Rule], is_group: bool) -> list[Rule]:
     return [r for r in rules if r.scope == "all" or r.scope == want]
 
 
+# 平台 id → 她嘴里怎么称呼这个渠道
+CHANNELS = {
+    "aiocqhttp": "QQ",
+    "qq": "QQ",
+    "weixin_oc": "微信",
+    "wechat": "微信",
+    "bluewhale": "桌面桌宠（桌面上那个 Live2D 的她）",
+    "webchat": "网页 / DSH 桌面端",
+    "dsh": "网页 / DSH 桌面端",
+    "lark": "飞书",
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "slack": "Slack",
+    "kook": "KOOK",
+    "dingtalk": "钉钉",
+}
+
+
+def channel_name(platform: str, shown: str = "") -> str:
+    """把平台 id 翻成人话；认不出来就用对方给的显示名，再不行就返回原 id。"""
+    key = str(platform or "").strip().lower()
+    if key in CHANNELS:
+        return CHANNELS[key]
+    # 复合 id（比如 wechat:aiocqhttp）里取最长的那个匹配，别让短词先抢走
+    for k, v in sorted(CHANNELS.items(), key=lambda kv: -len(kv[0])):
+        if k and k in key:
+            return v
+    return str(shown or platform or "").strip() or "未知渠道"
+
+
+def channel_line(platform: str, umo: str, is_group: bool, shown: str = "") -> str:
+    """「你现在在哪」这一行：让她知道这句是从哪个渠道、哪个场合来的。
+
+    私聊不写会话 id：模型不需要，还会把 wxid / QQ 号写进提示和日志里。
+    群聊只留群号，她确实用得上（同一个群和不同群要分得清）。
+    """
+    name = channel_name(platform, shown)
+    where = "群聊" if is_group else "私聊"
+    line = f"【你现在在哪】主人这条消息是从「{name}」的{where}发来的"
+    umo = str(umo or "").strip()
+    if is_group and umo:
+        gid = umo.rsplit(":", 1)[-1]
+        if gid.isdigit():
+            line += f"（群 {gid}）"
+    line += "。渠道别答错：主人问起你从哪跟他说话，就照这个说；他说自己在手机/电脑上，那是设备，不是渠道。"
+    return line
+
+
 def render(rules: list[Rule], header: str = "【此刻的规矩】", max_chars: int = 600) -> str:
     """渲染成可直接追加到 system prompt 末尾的一段；空列表返回空串。"""
     if not rules:

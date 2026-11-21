@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -24,10 +25,10 @@ from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 try:
-    from .rules_core import parse_rules, render, select
+    from .rules_core import channel_line, channel_name, parse_rules, render, select
 except ImportError:  # 单独跑测试时按脚本导入
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from rules_core import parse_rules, render, select
+    from rules_core import channel_line, channel_name, parse_rules, render, select
 
 PLUGIN_NAME = "astrbot_plugin_dafeiyu_rules"
 DEFAULT_HEADER = "【此刻的规矩】"
@@ -41,6 +42,7 @@ class DafeiyuRules(Star):
         self._rules = []
         self._errors = []
         self._last_logged = None
+        self._last_channel_logged = None
         self._reload()
 
     # ---------- 配置 ----------
@@ -120,6 +122,73 @@ class DafeiyuRules(Star):
                 logger.info(f"[rules] {where}注入 {count} 条规矩（{len(block)} 字）")
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[rules] 注入失败，跳过这轮：{exc}")
+
+    # ---------- 渠道 ----------
+
+    def _channel_enabled(self) -> bool:
+        value = self._get("inject_channel", True)
+        if isinstance(value, str):
+            return value.strip().lower() not in ("", "0", "false", "no", "off", "关")
+        return bool(value)
+
+    def _platform_name(self, event) -> str:
+        try:
+            return str(event.get_platform_name() or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _build_channel_block(self, event) -> str:
+        """她此刻在哪个渠道跟主人说话。单独拆出来方便测。"""
+        if not self._channel_enabled():
+            return ""
+        platform = self._platform_name(event)
+        shown = ""
+        try:
+            meta = event.get_platform_meta() if hasattr(event, "get_platform_meta") else None
+            shown = str(getattr(meta, "name", "") or "")
+        except Exception:  # noqa: BLE001
+            shown = ""
+        umo = str(getattr(event, "unified_msg_origin", "") or "")
+        return channel_line(platform, umo, self._is_group(event), shown)
+
+    @filter.on_llm_request()
+    async def add_channel_hint(self, event: AstrMessageEvent, req) -> None:
+        try:
+            block = self._build_channel_block(event)
+            if not block:
+                return
+            if getattr(event, "_dafeiyu_channel_block", None) == block:
+                return
+            event._dafeiyu_channel_block = block  # type: ignore[attr-defined]
+
+            base = getattr(req, "system_prompt", "") or ""
+            if block in base:
+                return
+            req.system_prompt = f"{base}\n\n{block}" if base else block
+
+            stamp = (self._is_group(event), block)
+            if stamp != self._last_channel_logged:
+                self._last_channel_logged = stamp
+                # 只记渠道名与长度：这一行里可能带着群号/私聊 id，别落日志
+                logger.info(
+                    f"[rules] 渠道提示已注入：{channel_name(self._platform_name(event))}"
+                    f"/{'群聊' if self._is_group(event) else '私聊'}（{len(block)} 字）"
+                )
+
+            # 临时排查：这轮请求里到底带了哪些工具（只打一次/渠道变化时）
+            if os.environ.get("DAFEIYU_DEBUG_TOOLS", "0") == "1":
+                try:
+                    ts = getattr(req, "func_tool", None)
+                    names = [getattr(t, "name", "?") for t in getattr(ts, "tools", []) or []]
+                    hit = "screen_peek" in names
+                    logger.info(
+                        f"[rules-debug] tools={len(names)} screen_peek={hit} "
+                        f"session={getattr(event, 'unified_msg_origin', '')}"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"[rules-debug] 读工具失败：{exc}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[rules] 渠道提示注入失败，跳过这轮：{exc}")
 
     # ---------- 命令 ----------
 
