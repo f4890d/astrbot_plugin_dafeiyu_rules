@@ -31,6 +31,15 @@ except ImportError:  # 单独跑测试时按脚本导入
     from rules_core import channel_line, channel_name, parse_rules, render, select
 
 PLUGIN_NAME = "astrbot_plugin_dafeiyu_rules"
+def _now_hm() -> str:
+    """本地钟点 HH:MM，给时段规矩用。"""
+    try:
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 DEFAULT_HEADER = "【此刻的规矩】"
 
 
@@ -89,7 +98,7 @@ class DafeiyuRules(Star):
         if not self._enabled():
             return "", 0
         self._reload()
-        active = select(self._rules, self._is_group(event))
+        active = select(self._rules, self._is_group(event), _now_hm())
         block = render(
             active,
             header=str(self._get("header", DEFAULT_HEADER) or DEFAULT_HEADER),
@@ -204,7 +213,7 @@ class DafeiyuRules(Star):
 
         self._reload()
         here_group = self._is_group(event)
-        active = select(self._rules, here_group)
+        active = select(self._rules, here_group, _now_hm())
         where = "群里" if here_group else "私聊"
 
         if not self._rules:

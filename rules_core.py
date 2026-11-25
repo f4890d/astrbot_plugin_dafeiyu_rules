@@ -22,16 +22,38 @@ _SCOPES = {
 }
 
 _SEP = re.compile(r"\s*[|｜]\s*")
+# 时段前缀：@22:00-06:00（跨天也行）
+_TIME = re.compile(r"^@?\s*(\d{1,2})[:：](\d{2})\s*[-~—]\s*(\d{1,2})[:：](\d{2})$")
 
 
 @dataclass(frozen=True)
 class Rule:
     scope: str      # all / group / private
     text: str
+    window: tuple[str, str] | None = None   # ("22:00", "06:00")，None＝全天都算
+
+
+def _hmm(hour: int, minute: int) -> str:
+    return f"{hour:02d}:{minute:02d}"
+
+
+def in_window(now_hm: str, start: str, end: str) -> bool:
+    """now 落在 [start, end) 里吗；start > end 表示跨天（比如 22:00-06:00）。"""
+    now = str(now_hm or "").strip()
+    if not now or not start or not end:
+        return True
+    if start == end:
+        return True
+    if start < end:
+        return start <= now < end
+    return now >= start or now < end
 
 
 def parse_rules(raw: str) -> tuple[list[Rule], list[str]]:
-    """把配置里的多行文本解析成规矩列表；解析不了的行收集成错误说明。"""
+    """把配置里的多行文本解析成规矩列表；解析不了的行收集成错误说明。
+
+    一行两种写法：`范围 | 正文`，或带时段 `@22:00-06:00 范围 | 正文`（范围可省，省了就是 all）。
+    """
     rules: list[Rule] = []
     errors: list[str] = []
     for lineno, line in enumerate((raw or "").splitlines(), 1):
@@ -42,8 +64,29 @@ def parse_rules(raw: str) -> tuple[list[Rule], list[str]]:
         if len(parts) == 1:
             errors.append(f"第 {lineno} 行没写范围（要 all/group/private 加竖线）：{s[:40]}")
             continue
-        scope_key = parts[0].strip().lower()
+        head = parts[0].strip()
         text = parts[1].strip()
+
+        window: tuple[str, str] | None = None
+        bad_time = False
+        tokens = head.split()
+        scope_key = "all"
+        for token in tokens:
+            hit = _TIME.match(token)
+            if hit:
+                h1, m1, h2, m2 = (int(x) for x in hit.groups())
+                if h1 > 23 or h2 > 23 or m1 > 59 or m2 > 59:
+                    bad_time = True
+                    errors.append(f"第 {lineno} 行时段「{token}」不是合法时间")
+                else:
+                    window = (_hmm(h1, m1), _hmm(h2, m2))
+                continue
+            scope_key = token.strip().lower()
+
+        if bad_time:
+            # 时段写歪了就整行丢掉，别让这条悄悄变成全天生效
+            continue
+
         scope = _SCOPES.get(scope_key)
         if scope is None:
             errors.append(f"第 {lineno} 行范围「{scope_key}」不认识，只能是 all / group / private")
@@ -51,14 +94,21 @@ def parse_rules(raw: str) -> tuple[list[Rule], list[str]]:
         if not text:
             errors.append(f"第 {lineno} 行只有范围没有内容")
             continue
-        rules.append(Rule(scope, text))
+        rules.append(Rule(scope, text, window))
     return rules, errors
 
 
-def select(rules: list[Rule], is_group: bool) -> list[Rule]:
-    """挑出这个场合该说的规矩：all 一直生效，group/private 各管一边。"""
+def select(rules: list[Rule], is_group: bool, now_hm: str = "") -> list[Rule]:
+    """挑出这个场合、这个钟点该说的规矩：all 一直生效，group/private 各管一边，时段题的到点才算。"""
     want = "group" if is_group else "private"
-    return [r for r in rules if r.scope == "all" or r.scope == want]
+    out: list[Rule] = []
+    for r in rules:
+        if r.scope != "all" and r.scope != want:
+            continue
+        if r.window and not in_window(now_hm, r.window[0], r.window[1]):
+            continue
+        out.append(r)
+    return out
 
 
 # 平台 id → 她嘴里怎么称呼这个渠道

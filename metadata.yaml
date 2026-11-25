@@ -1,9 +1,8 @@
 name: astrbot_plugin_dafeiyu_rules
 display_name: 小鲸鱼的规矩
 desc: 按场合注入的临时规矩：每条可单独开关，可只对群聊或只对私聊生效，改动立刻生效；还能每轮告诉她现在是哪个渠道在说话。
-version: 0.2.0
+version: 0.2.1
 author: zexuan604
-repo: https://github.com/f4890d/astrbot_plugin_dafeiyu_rules
 help: 在 WebUI 的插件配置里写「范围 | 规矩」一行一条，范围填 all / group / private；聊天里发 /规矩 可以看当前场合生效的哪几条。inject_channel 打开后，她每轮都知道自己是在 QQ、微信、桌面桌宠还是网页里跟你说话。
 tags:
   - 规则
